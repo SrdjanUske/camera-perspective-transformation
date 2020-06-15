@@ -13,14 +13,14 @@ IPM::IPM( const cv::Size& _origSize, const cv::Size& _dstSize, const std::vector
 		
 	createMaps();	
 }
-void IPM::drawPoints( const std::vector<cv::Point2f>& _points, cv::Mat& _img ) const
+void IPM::drawPoints( const std::vector<cv::Point2f>& _points, cv::Mat& _img, cv::Scalar color ) const
 {
 	assert(_points.size() == 4);
 
-	line(_img, Point(static_cast<int>(_points[0].x), static_cast<int>(_points[0].y)), Point(static_cast<int>(_points[3].x), static_cast<int>(_points[3].y)), CV_RGB( 205,205,0), 2);
-	line(_img, Point(static_cast<int>(_points[2].x), static_cast<int>(_points[2].y)), Point(static_cast<int>(_points[3].x), static_cast<int>(_points[3].y)), CV_RGB( 205,205,0), 2);
-	line(_img, Point(static_cast<int>(_points[0].x), static_cast<int>(_points[0].y)), Point(static_cast<int>(_points[1].x), static_cast<int>(_points[1].y)), CV_RGB( 205,205,0), 2);
-	line(_img, Point(static_cast<int>(_points[2].x), static_cast<int>(_points[2].y)), Point(static_cast<int>(_points[1].x), static_cast<int>(_points[1].y)), CV_RGB( 205,205,0), 2);
+	line(_img, Point(static_cast<int>(_points[0].x), static_cast<int>(_points[0].y)), Point(static_cast<int>(_points[3].x), static_cast<int>(_points[3].y)), color, 2);
+	line(_img, Point(static_cast<int>(_points[2].x), static_cast<int>(_points[2].y)), Point(static_cast<int>(_points[3].x), static_cast<int>(_points[3].y)), color, 2);
+	line(_img, Point(static_cast<int>(_points[0].x), static_cast<int>(_points[0].y)), Point(static_cast<int>(_points[1].x), static_cast<int>(_points[1].y)), color, 2);
+	line(_img, Point(static_cast<int>(_points[2].x), static_cast<int>(_points[2].y)), Point(static_cast<int>(_points[1].x), static_cast<int>(_points[1].y)), color, 2);
 	
 	for(size_t i=0; i<_points.size(); i++)
 	{
