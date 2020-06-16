@@ -13,6 +13,7 @@
 
 static bool defined_warp_pole = false;
 static bool defined_inverse_pole = false;
+static bool defined_finetune_pole = false;
 static cv::Point2f pole_locations_warp[4];
 static std::vector<cv::Point2f> pole_locations_inverse;
 
@@ -248,9 +249,16 @@ int main(int argc, char* argv[])
     std::vector<cv::Point2f> dst_inverse_next_rect_2;
     std::vector<cv::Point2f> dst_inverse_next_rect_3;
 
+    std::vector<cv::Point2f> src_finetune;
+    std::vector<cv::Point2f> dst_finetune;
+    std::vector<cv::Point2f> dst_finetune_next_rect_1;
+    std::vector<cv::Point2f> dst_finetune_next_rect_2;
+    std::vector<cv::Point2f> dst_finetune_next_rect_3;
+
     cv::namedWindow("input", cv::WINDOW_AUTOSIZE);
     cv::namedWindow("output_warp", cv::WINDOW_NORMAL);
     cv::namedWindow("output_inverse", cv::WINDOW_AUTOSIZE);
+    cv::namedWindow("output_finetune", cv::WINDOW_AUTOSIZE);
 
     snprintf(out_file_warp, sizeof(out_file_warp), "output_warp_%d.mp4", atoi(argv[1]));
     snprintf(out_file_inverse, sizeof(out_file_inverse), "output_inverse_%d.mp4", atoi(argv[1]));
@@ -263,6 +271,7 @@ int main(int argc, char* argv[])
     {
         cv::Mat result_warp(HEIGHT, WIDTH, CV_8UC3, cv::Scalar(255, 255, 255));
         cv::Mat result_inverse;
+        cv::Mat result_finetune;
         uyvy_stream.read((char*)uyvy_frame, FRAME_SIZE_UYVY);
         opencv_uyvy_frame.data = uyvy_frame;
         cv::cvtColor(opencv_uyvy_frame, opencv_bgr_frame, cv::COLOR_YUV2BGR_UYVY);
@@ -370,10 +379,37 @@ int main(int argc, char* argv[])
                 defined_inverse_pole = true;
             }
             ipm.applyHomography(result_warp, result_inverse);
+
+            if (!defined_finetune_pole)
+            {
+                src_finetune.push_back(pole_locations_inverse[2]);
+                src_finetune.push_back(pole_locations_inverse[3]);
+                src_finetune.push_back(pole_locations_inverse[1]);
+                src_finetune.push_back(pole_locations_inverse[0]);
+
+                dst_finetune.push_back(cv::Point2f(src_finetune[0].x, HEIGHT));
+                dst_finetune.push_back(cv::Point2f(src_finetune[1].x, HEIGHT));
+                dst_finetune.push_back(cv::Point2f(src_finetune[1].x, src_finetune[3].y));
+                dst_finetune.push_back(cv::Point2f(src_finetune[0].x, src_finetune[3].y));
+
+                next_rect(dst_finetune, dst_finetune_next_rect_1);
+                next_rect(dst_finetune_next_rect_1, dst_finetune_next_rect_2);
+                next_rect(dst_finetune_next_rect_2, dst_finetune_next_rect_3);
+                defined_finetune_pole = true;
+            }
+            IPM ipm_finetune(cv::Size(WIDTH, HEIGHT), cv::Size(WIDTH, HEIGHT), src_finetune, dst_finetune);
+            ipm_finetune.applyHomography(result_inverse, result_finetune);
+
             ipm.drawPoints(src_inverse, result_warp, cv::Scalar(0,205,205));
             ipm.drawPoints(dst_inverse, result_inverse, cv::Scalar(0,205,205));
             ipm.drawPoints(dst_inverse_next_rect_1, result_inverse, cv::Scalar(255,0,0));
             ipm.drawPoints(dst_inverse_next_rect_2, result_inverse, cv::Scalar(0,0,255));
+            ipm.drawPoints(dst_inverse_next_rect_3, result_inverse, cv::Scalar(120,120,120));
+
+            ipm.drawPoints(dst_finetune, result_finetune, cv::Scalar(0,205,205));
+            ipm.drawPoints(dst_finetune_next_rect_1, result_finetune, cv::Scalar(255,0,0));
+            ipm.drawPoints(dst_finetune_next_rect_2, result_finetune, cv::Scalar(0,0,255));
+            ipm.drawPoints(dst_finetune_next_rect_3, result_finetune, cv::Scalar(120,120,120));
 
             for (int m = 0; m < mouse_move_cnt; m++)
                 circle(result_inverse, pole_locations_inverse[m], 5, cv::Scalar(255, 0, 255), -1);
@@ -382,6 +418,7 @@ int main(int argc, char* argv[])
             out_video_inverse.write(result_inverse);
             cv::imshow("output_warp", result_warp);
             cv::imshow("output_inverse", result_inverse);
+            cv::imshow("output_finetune", result_finetune);
         }
         for (int m = 0; m < mouse_move_cnt; m++)
             circle(opencv_bgr_frame, coordinates[m], 5, cv::Scalar(0, 0, 255), -1);
