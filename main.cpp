@@ -11,6 +11,11 @@
 #define FRAME_SIZE_UYVY (WIDTH * HEIGHT * 2)
 #define PI 3.1415926
 
+static bool defined_warp_pole = false;
+static bool defined_inverse_pole = false;
+static cv::Point2f pole_locations_warp[4];
+static std::vector<cv::Point2f> pole_locations_inverse;
+
 enum line_Mofidy {
     SPREAD = 0,
     COMPRESS = 1,
@@ -191,6 +196,14 @@ static void next_rect(std::vector<cv::Point2f> src_points, std::vector<cv::Point
     dst_points.push_back(tmp[3]);
 }
 
+static void perspective_transform_element_wise(cv::Point2f src, cv::Point2f& dest, cv::Mat warpMatrix)
+{
+    dest.x = (int)((warpMatrix.at<double>(0,0)*src.x + warpMatrix.at<double>(0,1)*src.y + warpMatrix.at<double>(0,2)) /
+            (warpMatrix.at<double>(2,0)*src.x + warpMatrix.at<double>(2,1)*src.y + warpMatrix.at<double>(2,2)));
+    dest.y = (int)((warpMatrix.at<double>(1,0)*src.x + warpMatrix.at<double>(1,1)*src.y + warpMatrix.at<double>(1,2)) /
+            (warpMatrix.at<double>(2,0)*src.x + warpMatrix.at<double>(2,1)*src.y + warpMatrix.at<double>(2,2)));
+}
+
 int main(int argc, char* argv[])
 {
     int draw_points;
@@ -259,6 +272,9 @@ int main(int argc, char* argv[])
                 cv::setMouseCallback("input", MouseCallBackFunc, (void*)&opencv_bgr_frame);
             else
             {
+                for (int n = 0; n < NUM_KEY_POINTS; n++)
+                    pole_locations_warp[n] = coordinates[n];
+
                 enum CameraView cameraView;
                 int start_point_low = 0;
                 int start_point_high = 0;
@@ -331,19 +347,40 @@ int main(int argc, char* argv[])
         {
             // 1) Warp perspective
             cv::Mat warpMatrix = cv::getPerspectiveTransform(coordinates, dst_warp);
+            if (!defined_warp_pole)
+            {
+                for (int i = 0; i < NUM_KEY_POINTS; i++)
+                    perspective_transform_element_wise(pole_locations_warp[i], pole_locations_warp[i], warpMatrix);
+                defined_warp_pole = true;
+            }
             cv::warpPerspective(opencv_bgr_frame, result_warp, warpMatrix, result_warp.size());
+            for (int m = 0; m < mouse_move_cnt; m++)
+                circle(result_warp, pole_locations_warp[m], 5, cv::Scalar(255, 0, 255), -1);
 
             // 2) Inverse perspective transform
             IPM ipm(cv::Size(WIDTH, HEIGHT), cv::Size(WIDTH, HEIGHT), src_inverse, dst_inverse);
+            if (!defined_inverse_pole)
+            {
+                pole_locations_inverse.push_back(pole_locations_warp[0]);
+                pole_locations_inverse.push_back(pole_locations_warp[1]);
+                pole_locations_inverse.push_back(pole_locations_warp[2]);
+                pole_locations_inverse.push_back(pole_locations_warp[3]);
+                for (int i = 0; i < NUM_KEY_POINTS; i++)
+                    perspective_transform_element_wise(pole_locations_inverse[i], pole_locations_inverse[i], ipm.getH());
+                defined_inverse_pole = true;
+            }
             ipm.applyHomography(result_warp, result_inverse);
             ipm.drawPoints(src_inverse, result_warp, cv::Scalar(0,205,205));
             ipm.drawPoints(dst_inverse, result_inverse, cv::Scalar(0,205,205));
             ipm.drawPoints(dst_inverse_next_rect_1, result_inverse, cv::Scalar(255,0,0));
             ipm.drawPoints(dst_inverse_next_rect_2, result_inverse, cv::Scalar(0,0,255));
-            cv::imshow("output_warp", result_warp);
+
+            for (int m = 0; m < mouse_move_cnt; m++)
+                circle(result_inverse, pole_locations_inverse[m], 5, cv::Scalar(255, 0, 255), -1);
 
             out_video_warp.write(result_warp);
             out_video_inverse.write(result_inverse);
+            cv::imshow("output_warp", result_warp);
             cv::imshow("output_inverse", result_inverse);
         }
         for (int m = 0; m < mouse_move_cnt; m++)
