@@ -6,10 +6,11 @@
 #include "IPM.h"
 #include "mouse-event.h"
 
-#define WIDTH 1920
-#define HEIGHT 1080
-#define FRAME_SIZE_UYVY (WIDTH * HEIGHT * 2)
-#define PI 3.1415926
+#define WIDTH               1920
+#define HEIGHT              1080
+#define POLE_DISTANCE       (HEIGHT / 5)
+#define FRAME_SIZE_UYVY     (WIDTH * HEIGHT * 2)
+#define PI                  3.1415926
 
 static bool defined_warp_pole = false;
 static bool defined_inverse_pole = false;
@@ -19,9 +20,12 @@ static std::vector<cv::Point2f> pole_locations_inverse;
 
 enum line_Mofidy {
     SPREAD = 0,
-    COMPRESS = 1,
-    TRANSLATE_UP = 2,
-    TRANSLATE_DOWN = 3
+    SPREAD_UP = 1,
+    SPREAD_DOWN = 2,
+    COMPRESS = 3,
+    TRANSLATE_UP = 4,
+    TRANSLATE_DOWN = 5,
+    SPREAD_MAX = 6
 };
 
 enum CameraView
@@ -34,6 +38,7 @@ enum CameraView
 static void vertical_road_line_modification(cv::Point2f src[], cv::Point2f dst[],
 int weight, enum line_Mofidy mode, enum CameraView camView)
 {
+    double w_0_x, w_0_y, w_0, w_1_x, w_1_y, w_1, w;
     int diff_x = abs(src[0].x - src[1].x);
     int diff_y = abs(src[0].y - src[1].y);
     double theta = atan2(diff_y, diff_x);
@@ -50,6 +55,14 @@ int weight, enum line_Mofidy mode, enum CameraView camView)
             dst[1].x = int(src[1].x + weight * cos(theta));
             dst[1].y = int(src[1].y + weight * sin(theta));
             break;
+        case SPREAD_UP:
+            dst[0].x = int(src[0].x - weight * cos(theta));
+            dst[0].y = int(src[0].y - weight * sin(theta));
+            break;
+        case SPREAD_DOWN:
+            dst[1].x = int(src[1].x + weight * cos(theta));
+            dst[1].y = int(src[1].y + weight * sin(theta));
+            break;
         case COMPRESS:
             dst[0].x = int(src[0].x + weight * cos(theta));
             dst[0].y = int(src[0].y + weight * sin(theta));
@@ -67,6 +80,19 @@ int weight, enum line_Mofidy mode, enum CameraView camView)
             dst[0].y = int(src[0].y + weight * sin(theta));
             dst[1].x = int(src[1].x + weight * cos(theta));
             dst[1].y = int(src[1].y + weight * sin(theta));
+            break;
+        case SPREAD_MAX:
+            w_0_x = (src[0].x - 0) / cos(theta);
+            w_0_y = (src[0].y - 0) / sin(theta);
+            w_0 = std::min(w_0_x, w_0_y);
+            w_1_x = (WIDTH - src[1].x) / cos(theta);
+            w_1_y = (HEIGHT - src[1].y) / sin(theta);
+            w_1 = std::min(w_1_x, w_1_y);
+            w = std::min(w_0, w_1);
+            dst[0].x = int(src[0].x - w * cos(theta));
+            dst[0].y = int(src[0].y - w * sin(theta));
+            dst[1].x = int(src[1].x + w * cos(theta));
+            dst[1].y = int(src[1].y + w * sin(theta));
             break;
         default:
             std::cout << "LEFT: Unrecognized line modification mode!" << std::endl;
@@ -83,6 +109,14 @@ int weight, enum line_Mofidy mode, enum CameraView camView)
             dst[1].x = int(src[1].x - weight * cos(theta));
             dst[1].y = int(src[1].y + weight * sin(theta));
             break;
+        case SPREAD_UP:
+            dst[0].x = int(src[0].x + weight * cos(theta));
+            dst[0].y = int(src[0].y - weight * sin(theta));
+            break;
+        case SPREAD_DOWN:
+            dst[1].x = int(src[1].x - weight * cos(theta));
+            dst[1].y = int(src[1].y + weight * sin(theta));
+            break;
         case COMPRESS:
             dst[0].x = int(src[0].x - weight * cos(theta));
             dst[0].y = int(src[0].y + weight * sin(theta));
@@ -100,6 +134,19 @@ int weight, enum line_Mofidy mode, enum CameraView camView)
             dst[0].y = int(src[0].y + weight * sin(theta));
             dst[1].x = int(src[1].x - weight * cos(theta));
             dst[1].y = int(src[1].y + weight * sin(theta));
+            break;
+        case SPREAD_MAX:
+            w_0_x = (WIDTH - src[0].x) / cos(theta);
+            w_0_y = (src[0].y - 0) / sin(theta);
+            w_0 = std::min(w_0_x, w_0_y);
+            w_1_x = (src[1].x - 0) / cos(theta);
+            w_1_y = (HEIGHT - src[1].y) / sin(theta);
+            w_1 = std::min(w_1_x, w_1_y);
+            w = std::min(w_0, w_1);
+            dst[0].x = int(src[0].x + w * cos(theta));
+            dst[0].y = int(src[0].y - w * sin(theta));
+            dst[1].x = int(src[1].x - w * cos(theta));
+            dst[1].y = int(src[1].y + w * sin(theta));
             break;
         default:
             std::cout << "RIGHT: Unrecognized line modification mode!" << std::endl;
@@ -223,8 +270,10 @@ int main(int argc, char* argv[])
     cv::Mat opencv_uyvy_frame(HEIGHT, WIDTH, CV_8UC2);
     cv::Mat opencv_bgr_frame(HEIGHT, WIDTH, CV_8UC3);
     char filename[200];
+    char out_file_input[200];
     char out_file_warp[200];
     char out_file_inverse[200];
+    char out_file_finetune[200];
 
     snprintf(filename, sizeof(filename),
         "/home/rtrk/Desktop/Faculty/Master-rad/01-frame-grabber/camera-inputs/stalak-2020-05-21/SSD-1/Out%d.yuv",
@@ -260,10 +309,15 @@ int main(int argc, char* argv[])
     cv::namedWindow("output_inverse", cv::WINDOW_AUTOSIZE);
     cv::namedWindow("output_finetune", cv::WINDOW_AUTOSIZE);
 
+    snprintf(out_file_input, sizeof(out_file_input), "input_%d.mp4", atoi(argv[1]));
     snprintf(out_file_warp, sizeof(out_file_warp), "output_warp_%d.mp4", atoi(argv[1]));
     snprintf(out_file_inverse, sizeof(out_file_inverse), "output_inverse_%d.mp4", atoi(argv[1]));
+    snprintf(out_file_finetune, sizeof(out_file_finetune), "output_finetune_%d.mp4", atoi(argv[1]));
+
+    cv::VideoWriter out_video_input(out_file_input, CV_FOURCC('M','J','P','G'), 10, opencv_bgr_frame.size());
     cv::VideoWriter out_video_warp(out_file_warp, CV_FOURCC('M','J','P','G'), 10, opencv_bgr_frame.size());
     cv::VideoWriter out_video_inverse(out_file_inverse, CV_FOURCC('M','J','P','G'), 10, opencv_bgr_frame.size());
+    cv::VideoWriter out_video_finetune(out_file_finetune, CV_FOURCC('M','J','P','G'), 10, opencv_bgr_frame.size());
 
     bool clickEvent = true;
 
@@ -312,6 +366,10 @@ int main(int argc, char* argv[])
 
                 cv::Point2f line_modify_l[2];
                 cv::Point2f line_modify_r[2];
+                double line_distance_l;
+                double line_distance_r;
+                double line_ratio;
+                int distance = 3 * POLE_DISTANCE / 2;
                 switch (cameraView)
                 {
                 case LEFT:
@@ -319,8 +377,24 @@ int main(int argc, char* argv[])
                     line_modify_l[1] = coordinates[start_point_low];
                     line_modify_r[0] = coordinates[start_point_high];
                     line_modify_r[1] = coordinates[start_point_low + 1];
-                    vertical_road_line_modification(line_modify_l, line_modify_l, 200, SPREAD, LEFT);
-                    vertical_road_line_modification(line_modify_r, line_modify_r, 200, SPREAD, LEFT);
+                    line_distance_l = cv::norm(line_modify_l[0] - line_modify_l[1]);
+                    line_distance_r = cv::norm(line_modify_r[0] - line_modify_r[1]);
+
+                    if (line_distance_l > line_distance_r)
+                    {
+                        line_ratio = line_distance_l / line_distance_r;
+                        line_distance_l = distance;
+                        line_distance_r = (int)(distance / line_ratio);
+                    }
+                    else
+                    {
+                        line_ratio = line_distance_r / line_distance_l;
+                        line_distance_l = (int)(distance / line_ratio);
+                        line_distance_r = distance;
+                    }
+
+                    vertical_road_line_modification(line_modify_l, line_modify_l, (int)line_distance_l, SPREAD, LEFT);
+                    vertical_road_line_modification(line_modify_r, line_modify_r, (int)line_distance_r, SPREAD, LEFT);
                     coordinates[start_point_high - 1] = line_modify_l[0];
                     coordinates[start_point_low] = line_modify_l[1];
                     coordinates[start_point_high] = line_modify_r[0];
@@ -331,8 +405,24 @@ int main(int argc, char* argv[])
                     line_modify_l[1] = coordinates[start_point_low - 1];
                     line_modify_r[0] = coordinates[start_point_high + 1];
                     line_modify_r[1] = coordinates[start_point_low];
-                    vertical_road_line_modification(line_modify_l, line_modify_l, 200, SPREAD, RIGHT);
-                    vertical_road_line_modification(line_modify_r, line_modify_r, 200, SPREAD, RIGHT);
+                    line_distance_l = cv::norm(line_modify_l[0] - line_modify_l[1]);
+                    line_distance_r = cv::norm(line_modify_r[0] - line_modify_r[1]);
+
+                    if (line_distance_l > line_distance_r)
+                    {
+                        line_ratio = line_distance_l / line_distance_r;
+                        line_distance_l = distance;
+                        line_distance_r = (int)(distance / line_ratio);
+                    }
+                    else
+                    {
+                        line_ratio = line_distance_r / line_distance_l;
+                        line_distance_l = (int)(distance / line_ratio);
+                        line_distance_r = distance;
+                    }
+
+                    vertical_road_line_modification(line_modify_l, line_modify_l, (int)line_distance_l, SPREAD, RIGHT);
+                    vertical_road_line_modification(line_modify_r, line_modify_r, (int)line_distance_r, SPREAD, RIGHT);
                     coordinates[start_point_high] = line_modify_l[0];
                     coordinates[start_point_low - 1] = line_modify_l[1];
                     coordinates[start_point_high + 1] = line_modify_r[0];
@@ -354,7 +444,6 @@ int main(int argc, char* argv[])
         }
         else
         {
-            // 1) Warp perspective
             cv::Mat warpMatrix = cv::getPerspectiveTransform(coordinates, dst_warp);
             if (!defined_warp_pole)
             {
@@ -366,7 +455,6 @@ int main(int argc, char* argv[])
             for (int m = 0; m < mouse_move_cnt; m++)
                 circle(result_warp, pole_locations_warp[m], 5, cv::Scalar(255, 0, 255), -1);
 
-            // 2) Inverse perspective transform
             IPM ipm(cv::Size(WIDTH, HEIGHT), cv::Size(WIDTH, HEIGHT), src_inverse, dst_inverse);
             if (!defined_inverse_pole)
             {
@@ -387,10 +475,11 @@ int main(int argc, char* argv[])
                 src_finetune.push_back(pole_locations_inverse[1]);
                 src_finetune.push_back(pole_locations_inverse[0]);
 
-                dst_finetune.push_back(cv::Point2f(src_finetune[0].x, HEIGHT));
-                dst_finetune.push_back(cv::Point2f(src_finetune[1].x, HEIGHT));
-                dst_finetune.push_back(cv::Point2f(src_finetune[1].x, src_finetune[3].y));
-                dst_finetune.push_back(cv::Point2f(src_finetune[0].x, src_finetune[3].y));
+                int Yl = std::min(src_finetune[0].y, src_finetune[1].y);
+                dst_finetune.push_back(cv::Point2f(src_finetune[0].x, Yl));
+                dst_finetune.push_back(cv::Point2f(src_finetune[1].x, Yl));
+                dst_finetune.push_back(cv::Point2f(src_finetune[1].x, Yl - POLE_DISTANCE));
+                dst_finetune.push_back(cv::Point2f(src_finetune[0].x, Yl - POLE_DISTANCE));
 
                 next_rect(dst_finetune, dst_finetune_next_rect_1);
                 next_rect(dst_finetune_next_rect_1, dst_finetune_next_rect_2);
@@ -416,20 +505,25 @@ int main(int argc, char* argv[])
 
             out_video_warp.write(result_warp);
             out_video_inverse.write(result_inverse);
+            out_video_finetune.write(result_finetune);
+
             cv::imshow("output_warp", result_warp);
             cv::imshow("output_inverse", result_inverse);
             cv::imshow("output_finetune", result_finetune);
         }
         for (int m = 0; m < mouse_move_cnt; m++)
             circle(opencv_bgr_frame, coordinates[m], 5, cv::Scalar(0, 0, 255), -1);
+        out_video_input.write(opencv_bgr_frame);
         cv::imshow("input", opencv_bgr_frame);
         if (cv::waitKey(1) >= 0)
             break;
     }
 
     cv::destroyAllWindows();
+    out_video_input.release();
     out_video_warp.release();
     out_video_inverse.release();
+    out_video_finetune.release();
     uyvy_stream.close();
 
     return 0;
