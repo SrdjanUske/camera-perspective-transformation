@@ -1,11 +1,7 @@
 #ifndef __IPM_H__
 #define __IPM_H__
 
-#include <opencv2/calib3d/calib3d.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/features2d/features2d.hpp>
-
+#include <opencv2/opencv.hpp>
 #include <iostream>
 
 class IPM
@@ -30,7 +26,7 @@ public:
 	void getPoints(std::vector<cv::Point2f>& _origPts, std::vector<cv::Point2f>& _ipmPts);
 
 	// Draw
-	void drawPoints( const std::vector<cv::Point2f>& _points, cv::Mat& _img, cv::Scalar color ) const;
+	void drawPoints( const std::vector<cv::Point2f>& _points, cv::Mat& _img, cv::Scalar color ) const; 
 
 private:
 	void createMaps();

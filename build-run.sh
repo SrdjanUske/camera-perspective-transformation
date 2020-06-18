@@ -9,6 +9,6 @@ then
 fi
 
 echo "Build..."
-g++ main.cpp IPM.cpp mouse-event.cpp -o perspective-transform -I. `pkg-config --cflags --libs opencv`
+g++ main.cpp IPM.cpp mouse-event.cpp perspective-transform.cpp -o perspective-transform -I. `pkg-config --cflags --libs opencv`
 echo "Exec..."
-./perspective-transform $1 $2
+./perspective-transform $1

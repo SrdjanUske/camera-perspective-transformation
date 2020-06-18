@@ -15,7 +15,6 @@ extern bool click_finished;
  * coordinates[3] -> bottom-right
  */
 extern cv::Point2f coordinates[NUM_KEY_POINTS];
-
 void MouseCallBackFunc(int event, int x, int y, int flags, void* userdata);
 
 #endif /* __MOUSE_EVENT_H__ */
